@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Email Blaster</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+<body>
+
+
+   
+    <!--<form method="POST" action="/confirm_button/{{random_token}}">-->
+    <form method="POST" action = "{{ url_for('confirm_button') }}">
+        <input type="hidden" name="action_type" value="button_pressed">
+    
+        <button id = "clickButton" value = "confirm" type="submit" name="submit_button">
+        Confirmation to send the Email</button>
+</form>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous">
+        
+    document.getElementById('clickButton').addEventListener('click', function() {
+            // Send a POST request to the Flask server
+            fetch('/confirm_button', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json()) // Parse the JSON response
+            .then(data => {
+                if(data.success) {
+                    // Optional: Give visual feedback to the user on this page
+                    console.log('Button clicked')
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    
+    </script>
+
+</body>
+
+</html>

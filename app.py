@@ -1,0 +1,482 @@
+from flask import Flask, render_template, request, flash, abort, send_file, redirect, url_for, session
+import pandas as pd
+from io import StringIO
+import csv
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import pytz
+from functools import wraps
+
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+import smtplib
+from datetime import datetime, timezone, timedelta
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, current_user, fresh_login_required, login_required, UserMixin, login_user, logout_user
+from flask_socketio import SocketIO
+
+from premailer import transform
+import re
+import base64
+import uuid
+
+
+app=Flask(__name__)
+
+app.secret_key = 'qL5=shBVtq*V+J#H*F]wew.5CFGG!oZj' 
+socketio = SocketIO(app)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_BINDS'] = {
+    'count': 'sqlite:///logs.db', # Secondary DB
+    'token_links': 'sqlite:///tokens.db' #Third DB
+}
+
+
+login_manager=LoginManager()
+login_manager.init_app(app)
+
+login_manager.login_view = 'login_page'
+login_manager.login_message = "Please log in to access this page."
+
+
+
+db = SQLAlchemy(app)
+
+'''class Counter(db.Model):
+    __bind_key__='count'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    count = db.Column(db.Integer, default=0)
+'''
+class Logs(db.Model):
+    __bind_key__='count'
+    id = db.Column(db.Integer, primary_key=True)
+    email_subject = db.Column(db.String(200))
+    email_timestamp = db.Column(db.String(100), default =datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
+    confirmation_one = db.Column(db.String(80), nullable =True)
+    confirmation_two = db.Column(db.String(80), nullable = True)
+    submitted = db.Column(db.Boolean, default = False)
+
+class Users(db.Model, UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), nullable = False)
+    email_address = db.Column(db.String(100), unique = True)
+    password = db.Column(db.String(100), nullable = False)
+    admin = db.Column(db.Boolean, default = False)
+
+class SingleUseLink(db.Model):
+    __bind_key__= "token_links"
+    id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(120))
+    email_subject = db.Column(db.String(180))
+    token = db.Column(db.String(100), unique = True)
+    is_used = db.Column(db.Boolean, default = False)
+    created_at = db.Column(db.DateTime, default = datetime.utcnow)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(Users, int(user_id))
+
+def initialize_database():
+    with app.app_context():
+        # Create all tables defined by the models
+        db.create_all()
+        # Check if the 'button_clicks' counter exists, if not, create it
+        '''if not Counter.query.filter_by(name='button_clicks').first():
+            initial_counter = Counter(name='button_clicks', count=0)
+            db.session.add(initial_counter)
+            db.session.commit()'''
+        if not Users.query.filter_by(username='Rena').first():
+            rena_user = Users(username='Rena', email_address = "renatestt@gmail.com", password = 'password', admin = True)
+            rena2_user = Users(username='RenaTwo', email_address = "rena@cbt.io", password = 'password', admin = True)
+            db.session.add(rena_user)
+            db.session.add(rena2_user)
+            db.session.commit()
+
+html_template="""\
+<html>
+    <body style = "background-color: white; display:flex; justify-content: center; align-items: center;" >
+    
+        <div class = "box" style = "background-color: rgb(189, 218, 226); border-radius: 10px; padding: 30px; height: 700px; width:600px; text-align: center;">
+            <h2>Test</h2>
+            <div class = "message" style = "position: relative; top: 50px; left: -250px;">
+                <p>{message}</p>
+            </div>
+        </div>
+        
+    </body>
+</html>
+"""
+
+button_template="""\
+<html>
+    <body>
+        <p>Please click the button if this is the correct email you'd like to send.</p>
+        <form method="POST" action="/confirm_email_page">
+            <a href = "http://127.0.0.1:5000/confirm_email" class = "confirm_button"> Confirm</a>
+        </form>
+    </body>
+</html>
+"""
+
+
+def find_time():
+    token_received_time = datetime.now(timezone.utc)
+    return token_received_time
+
+def message_function (text, subject, client_name, html):
+    msg_root = MIMEMultipart('related')
+    msg_alternative =  MIMEMultipart('alternative')
+    msg_root.attach(msg_alternative)
+    #if "[client]" in text:
+    customized_body = text.replace("[Client]", client_name)
+    html_content = html_template.format(message=customized_body)
+    msg_root['Subject'] = subject
+    if html == None:
+        image_pattern = r'src="data:image/(?P<ext>.*?);base64,(?P<data>.*?)"'
+        images = re.finditer(image_pattern, text)
+        final_html=customized_body
+        if images:
+            for i, match in enumerate(images):
+                ext = match.group('ext')
+                data = match.group('data')
+                content_id = f"image_{i}_{uuid.uuid4().hex}"
+                base64_string = f"data:image/{ext};base64,{data}"
+                final_html = final_html.replace(base64_string, f"cid:{content_id}")
+                image_bytes = base64.b64decode(data)
+                msg_image = MIMEImage(image_bytes, _subtype=ext)
+                msg_image.add_header('Content-ID', f'<{content_id}>')
+                msg_image.add_header('Content-Disposition', 'inline', filename=f"{content_id}.{ext}")
+                msg_root.attach(msg_image)
+        msg_alternative.attach(MIMEText(final_html, 'html'))
+    else:
+        image_pattern = r'src="data:image/(?P<ext>.*?);base64,(?P<data>.*?)"'
+        images = re.finditer(image_pattern, text)
+        final_html=html_content
+        if images:
+            for i, match in enumerate(images):
+                ext = match.group('ext')
+                data = match.group('data')
+                content_id = f"image_{i}_{uuid.uuid4().hex}"
+                base64_string = f"data:image/{ext};base64,{data}"
+                final_html = final_html.replace(base64_string, f"cid:{content_id}")
+                image_bytes = base64.b64decode(data)
+                msg_image = MIMEImage(image_bytes, _subtype=ext)
+                msg_image.add_header('Content-ID', f'<{content_id}>')
+                msg_image.add_header('Content-Disposition', 'inline', filename=f"{content_id}.{ext}")
+                msg_root.attach(msg_image)
+        msg_alternative.attach(MIMEText(final_html, 'html'))
+    return msg_root
+
+
+def confirm_button_function (text, subject, html, admin_email):
+    msg_mixed =  MIMEMultipart('mixed')
+    msg_root = MIMEMultipart('related')
+    msg_alternative =  MIMEMultipart('alternative')
+    msg_mixed.attach(msg_alternative)
+    msg_mixed.attach(msg_root)
+    html_content = html_template.format(message=text)
+    msg_mixed['Subject'] = subject
+    if html == None:
+        image_pattern = r'src="data:image/(?P<ext>.*?);base64,(?P<data>.*?)"'
+        images = re.finditer(image_pattern, text)
+        final_html=text
+        if images:
+            for i, match in enumerate(images):
+                ext = match.group('ext')
+                data = match.group('data')
+                content_id = f"image_{i}_{uuid.uuid4().hex}"
+                base64_string = f"data:image/{ext};base64,{data}"
+                final_html = final_html.replace(base64_string, f"cid:{content_id}")
+                image_bytes = base64.b64decode(data)
+                msg_image = MIMEImage(image_bytes, _subtype=ext)
+                msg_image.add_header('Content-ID', f'<{content_id}>')
+                msg_image.add_header('Content-Disposition', 'inline', filename=f"{content_id}.{ext}")
+                msg_root.attach(msg_image)
+        msg_alternative.attach(MIMEText(final_html, 'html'))
+    else:
+        image_pattern = r'src="data:image/(?P<ext>.*?);base64,(?P<data>.*?)"'
+        images = re.finditer(image_pattern, text)
+        final_html=html_content
+        if images:
+            for i, match in enumerate(images):
+                ext = match.group('ext')
+                data = match.group('data')
+                content_id = f"image_{i}_{uuid.uuid4().hex}"
+                base64_string = f"data:image/{ext};base64,{data}"
+                final_html = final_html.replace(base64_string, f"cid:{content_id}")
+                image_bytes = base64.b64decode(data)
+                msg_image = MIMEImage(image_bytes, _subtype=ext)
+                msg_image.add_header('Content-ID', f'<{content_id}>')
+                msg_image.add_header('Content-Disposition', 'inline', filename=f"{content_id}.{ext}")
+                msg_root.attach(msg_image)
+        msg_alternative.attach(MIMEText(final_html, 'html'))
+    msg_mixed.attach(MIMEText(button_template, "html"))
+    '''token_of_admin = SingleUseLink.query.filter_by(email_subject = subject, user_email=admin_email).first()
+    token = token_of_admin.token
+    new_button_template =  button_template.replace("<specific_token>", token)
+    msg_mixed.attach(MIMEText(new_button_template, "html"))
+    return msg_mixed'''
+    return msg_mixed
+
+
+@app.route('/')
+@login_required
+def frontend():
+    return render_template('Frontend.html', data = {})
+
+@app.route('/login', methods=['GET', 'POST'])
+def login_page():
+    if request.method =="POST":
+        user = Users.query.filter_by(username = request.form['username']).first()
+        password =request.form['password']
+        if user and password==user.password:
+            login_user(user, fresh=True)
+            print('Logged in')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('frontend'))
+        flash('Invalid Credentials')
+    return render_template('login.html')
+
+'''def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_user.admin ==False:
+            flash('access denied')
+            return redirect(url_for('frontend'))
+        return f(*args, **kwargs)
+    return decorated_function'''
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash("You're being logged out")
+    return redirect(url_for('login_page'))
+
+
+'''def get_date():
+    pst = pytz.timezone("US/Pacific")
+    now_pst=datetime.now(pst)
+    today = now_pst.date()
+    return today'''
+
+'''def create_csv(row, date):
+    csv_name = f"{date} Emails_Outputted.csv"
+    with open(csv_name, mode = 'a', newline = '') as file:
+        writer = csv.writer(file)
+        writer.writerow(row)'''
+
+def findEmail(CSV_File, email_content, email_subject, html):
+    smtp = smtplib.SMTP('send.smtp.com', 587)
+    smtp.ehlo()
+    smtp.starttls()
+    if CSV_File:
+        content = CSV_File.decode('utf-8')
+        df=pd.read_csv(StringIO(content))
+        csv_row_count = len(df)
+        csv_row =0
+        #create_csv(['Organization', "Name","Email"], get_date())
+        while csv_row<csv_row_count:
+            email_name = df.loc[csv_row, "Name"]
+            email=df.loc[csv_row, "Email"]
+            #email_organization=df.loc[csv_row, "Organization"]
+            msg = message_function(email_content, email_subject, email_name, html)
+            smtp.sendmail(from_addr= "noreply@cbt.io", to_addrs= email, msg = msg.as_string())
+            #create_csv([email_organization, email_name, email], get_date())
+            csv_row+=1
+        smtp.quit()
+        latest_log = db.session.execute(db.select(Logs).order_by(Logs.id.desc())).scalars().first()
+        latest_log.submitted = True
+        db.session.commit()
+        return render_template('Submitted.html')
+    else:
+        return render_template('Frontend.html', data = {}) #Replace with way to show that files haven't been inputted
+
+#Note, in order for the different names to occur, you must put [client] exactly
+
+def assign_token_links(email_subject):
+    users_database = Users.query.all()
+    for users in users_database:
+        if users.admin == True:
+            random_token = str(uuid.uuid4())
+            random_link = SingleUseLink(token=random_token, user_email=users.email_address, email_subject = email_subject)
+            db.session.add(random_link)
+            db.session.commit()
+
+
+
+def confirm_email(CSV_File, email_content, email_subject, html):
+    #assign_token_links(email_subject)
+    smtp = smtplib.SMTP('send.smtp.com', 587)
+    smtp.ehlo()
+    smtp.starttls()
+    
+    '''global start_time 
+    start_time = find_time()'''
+    '''counter_obj = Counter.query.filter_by(name="button_clicks").first()
+    counter_obj.count = 0'''
+    #db.session.commit()
+    admin_users = Users.query.filter_by(admin=True).all()
+    
+    for admin in admin_users:
+        msg = confirm_button_function(email_content, email_subject, html, admin.email_address)
+        smtp.sendmail(from_addr= "noreply@cbt.io", to_addrs= admin.email_address, msg = msg.as_string())
+    #smtp.sendmail(from_addr= "noreply@cbt.io", to_addrs= 'rena@cbt.io', msg = msg.as_string())
+    smtp.quit()
+
+#form_info={'file': '', 'email': '', 'subject': '', 'html':''}
+@app.route('/submit', methods=['POST'])
+def submit():
+
+    if request.method == 'POST':
+        csv_category = request.form.get('csv_type')
+        if csv_category == "preset_csv":
+            preset_chosen = request.form.get('preset_csv_options')
+            if preset_chosen =="Rena Emails":
+                with open('Rena Email CSV.csv', 'rb') as f:
+                    file = f.read()
+        elif csv_category == "custom_csv":
+            files = request.files.get('file')
+            file = files.read()
+        btn_clicked = request.form.get('action_type')
+        #file =request.files.get('file')
+        email=request.form['emailContent']
+        subject = request.form['subject']
+        html = request.form.get('HtmlButton')
+        data = {'file': file, 
+                'emailContent': email, 
+                'subject': subject, 
+                'html':html}
+        if btn_clicked == 'confirm':
+            print('confirm button clicked')
+            log_email_entry = Logs(email_subject= subject)
+            db.session.add(log_email_entry)
+            db.session.commit()
+            confirm_email(file, email, subject, html)
+            return render_template('Frontend.html', data = data)
+        elif btn_clicked == 'submit':
+            findEmail(file, email, subject, html)
+            return render_template('Frontend.html', data = {}, button_enabled = False)
+      
+        return render_template('Frontend.html', data = {})
+
+    
+    else:
+        return render_template('Frontend.html', data = {})
+
+@app.route('/email')
+def email():
+    return render_template('Frontend.html', data = {})
+
+@app.route('/confirm', methods=['POST'])
+def confirm_page():
+    return render_template('confirmation_page.html')
+
+'''@app.route('/confirm_email/<string:token>', methods=['GET','POST'])
+@login_required
+def confirm_email_page(token):
+    username = current_user.username
+    link_record = SingleUseLink.query.filter_by(token=token, user_email=username).first_or_404()
+    if link_record.is_used:
+        return "This link is dead", 403
+    is_button_clicked = request.form.get('submit_button')
+    if is_button_clicked == "confirm":
+        link_record.is_used = True
+        db.session.commit()
+        return render_template('confirmation_email.html', random_token=token)'''
+@app.route('/confirm_email', methods=['GET','POST'])
+@login_required
+def confirm_email_page():
+    return render_template('confirmation_email.html')
+    
+    
+    #return render_template('confirmation_email.html')
+counter = 0
+
+@db.event.listens_for(Logs, 'before_update')
+def event_listener(mapper, connection, target):
+    state=db.inspect(target)
+    confirm_one = state.attrs.confirmation_one.history.has_changes()
+    confirm_two = state.attrs.confirmation_two.history.has_changes()
+    submitted = state.attrs.submitted.history.has_changes()
+    if confirm_one:
+        global counter
+        counter +=1
+        print('confirmation with first person')
+        socketio.emit('confirmation_channel', {'amount': counter})
+    elif confirm_two:
+        counter+=1
+        print('confirmation with second person')
+        socketio.emit('button_enabled', {'status':'True'})
+        socketio.emit('confirmation_channel', {'amount': counter})
+    if submitted:
+        counter = 0
+
+finished_pending={'finished_pending':'False'}
+@app.route('/confirm_button', methods=['GET','POST'])
+def confirm_button():
+    
+    username = current_user.username
+    first_user_id =0
+    latest_log = db.session.execute(db.select(Logs).order_by(Logs.id.desc())).scalars().first()
+    if latest_log.confirmation_one is None:
+        first_user_id = current_user.id
+        latest_log.confirmation_one=username
+        db.session.commit()
+    elif latest_log.confirmation_one is not None and first_user_id != current_user.id:
+        latest_log.confirmation_two=username
+        db.session.commit()
+    #finished_pending['finished_pending'] = 'True'
+
+    return render_template('confirmation_page.html')
+    
+
+def add_users(username, password, admin):
+    new_user = Users(username = username, password =password, admin = admin)
+    db.session.add(new_user)
+    db.session.commit()
+
+def delete_users(id):
+    user_delete = Users.query.get(id)
+    db.session.delete(user_delete)
+    db.session.commit()
+
+@app.route('/admin_page', methods=['GET','POST'])  
+def admin_page():
+    form_category = request.form.get('user_form_type')
+    if form_category == 'add_user':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        admin = request.form.get('admin')
+        if admin =="on":
+            admin_status = True
+        else:
+            admin_status=False
+        add_users(username, password, admin_status)
+    elif form_category == "delete_user":
+        id = request.form.get('user_id')
+        delete_users(id)
+    users_table = Users.query.all()
+    return render_template('admin_page.html', users_table=users_table)
+
+
+
+@app.route('/pending')
+def pending():
+    pending = finished_pending['finished_pending']
+    return render_template(f'partials/{pending}.html')
+
+'''@app.route('/csv')
+def download_csv():
+    return send_file('Emails_Outputted.csv', as_attachment=True)'''
+
+
+if __name__ == '__main__':
+    initialize_database()
+    socketio.run(app, debug=True)
+    #app.run(port=5000)

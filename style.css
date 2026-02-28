@@ -1,0 +1,49 @@
+body{
+    background-color: rgb(201, 201, 216);
+}
+
+#form{
+    background-color: rgb(255, 255, 255);
+}
+#form2{
+    background-color: rgb(255, 255, 255);
+    margin-left: 0px;
+    border-style:solid;
+    border-width: 10px;
+    border-color: white;
+    border-radius: 9px; 
+}
+
+.custom-margin-top2{
+    margin-left: 0px;
+    border-style:solid;
+    border-width: 10px;
+    border-color: white;
+    border-radius: 9px; 
+}
+
+.custom-margin-top{
+    margin-top: 90px;
+    border-style:solid;
+    border-width: 20px;
+    border-color: white;
+    border-radius: 9px; 
+}
+#custom-margin-top2{
+    margin-left: 100px;
+    margin-top: 90px
+}
+
+.custom-margin-top3{
+    margin-top: 80px;
+    margin-left: 50px;
+}
+
+#custom-margin-top4{
+    margin-left: 50px;
+}
+
+#header{
+    background-color: white;
+}
+
