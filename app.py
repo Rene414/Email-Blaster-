@@ -17,6 +17,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user, fresh_login_required, login_required, UserMixin, login_user, logout_user
 from flask_socketio import SocketIO
 
+import secrets
+import string
 from premailer import transform
 import re
 import base64
@@ -32,7 +34,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_BINDS'] = {
     'count': 'sqlite:///logs.db', # Secondary DB
-    'token_links': 'sqlite:///tokens.db' #Third DB
+    'token_links': 'sqlite:///confirm_links.db', #Third DB
+    'documentation' : 'sqlite:///email_blast_documentation.db'
 }
 
 
@@ -55,6 +58,7 @@ db = SQLAlchemy(app)
 class Logs(db.Model):
     __bind_key__='count'
     id = db.Column(db.Integer, primary_key=True)
+    email_unique_id = email_subject = db.Column(db.String(15), unique=True)
     email_subject = db.Column(db.String(200))
     email_timestamp = db.Column(db.String(100), default =datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
     confirmation_one = db.Column(db.String(80), nullable =True)
@@ -71,11 +75,20 @@ class Users(db.Model, UserMixin):
 class SingleUseLink(db.Model):
     __bind_key__= "token_links"
     id = db.Column(db.Integer, primary_key=True)
+    email_unique_id = db.Column(db.String(15))
     user_email = db.Column(db.String(120))
     email_subject = db.Column(db.String(180))
-    token = db.Column(db.String(100), unique = True)
     is_used = db.Column(db.Boolean, default = False)
     created_at = db.Column(db.DateTime, default = datetime.utcnow)
+    
+class Documentation(db.Model):
+    __bind_key__= "documentation"
+    id = db.Column(db.Integer, primary_key=True)
+    client_email = db.Column(db.String(100), nullable = False)
+    client_name = db.Column(db.String(100), nullable = True)
+    email_subject = db.Column(db.String(180), nullable = False)
+    email_unique_id = db.Column(db.String(15))
+    date_sent = db.Column(db.String(100), default =datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -97,6 +110,9 @@ def initialize_database():
             db.session.add(rena2_user)
             db.session.commit()
 
+'''def create_link():
+    link = url_for('confirm_email_page', token = "", _external=True)'''
+
 html_template="""\
 <html>
     <body style = "background-color: white; display:flex; justify-content: center; align-items: center;" >
@@ -116,8 +132,8 @@ button_template="""\
 <html>
     <body>
         <p>Please click the button if this is the correct email you'd like to send.</p>
-        <form method="POST" action="/confirm_email_page">
-            <a href = "http://127.0.0.1:5000/confirm_email" class = "confirm_button"> Confirm</a>
+        <form method="POST" action="/confirm_email/<token>">
+            <a href = "http://127.0.0.1:5000/confirm_email/<id>/<admin_email>" class = "confirm_button"> Confirm</a>
         </form>
     </body>
 </html>
@@ -173,7 +189,7 @@ def message_function (text, subject, client_name, html):
     return msg_root
 
 
-def confirm_button_function (text, subject, html, admin_email):
+def confirm_button_function (email_id, text, subject, html, admin_email):
     msg_mixed =  MIMEMultipart('mixed')
     msg_root = MIMEMultipart('related')
     msg_alternative =  MIMEMultipart('alternative')
@@ -215,12 +231,11 @@ def confirm_button_function (text, subject, html, admin_email):
                 msg_image.add_header('Content-Disposition', 'inline', filename=f"{content_id}.{ext}")
                 msg_root.attach(msg_image)
         msg_alternative.attach(MIMEText(final_html, 'html'))
-    msg_mixed.attach(MIMEText(button_template, "html"))
     '''token_of_admin = SingleUseLink.query.filter_by(email_subject = subject, user_email=admin_email).first()
-    token = token_of_admin.token
-    new_button_template =  button_template.replace("<specific_token>", token)
-    msg_mixed.attach(MIMEText(new_button_template, "html"))
-    return msg_mixed'''
+    token = token_of_admin.token'''
+    new_button_template =  button_template.replace("<id>", email_id)
+    final_button_template =  new_button_template.replace("<admin_email>", admin_email)
+    msg_mixed.attach(MIMEText(final_button_template, "html"))
     return msg_mixed
 
 
@@ -271,7 +286,7 @@ def logout():
         writer = csv.writer(file)
         writer.writerow(row)'''
 
-def findEmail(CSV_File, email_content, email_subject, html):
+def send_email(CSV_File, email_content, email_id, email_subject, html):
     smtp = smtplib.SMTP('send.smtp.com', 587)
     smtp.ehlo()
     smtp.starttls()
@@ -287,10 +302,13 @@ def findEmail(CSV_File, email_content, email_subject, html):
             #email_organization=df.loc[csv_row, "Organization"]
             msg = message_function(email_content, email_subject, email_name, html)
             smtp.sendmail(from_addr= "noreply@cbt.io", to_addrs= email, msg = msg.as_string())
+            new_documentation = Documentation(client_email = email, client_name = email_name, email_subject = email_subject, email_unique_id= email_id)
+            db.session.add(new_documentation)
+            db.session.commit()
             #create_csv([email_organization, email_name, email], get_date())
             csv_row+=1
         smtp.quit()
-        latest_log = db.session.execute(db.select(Logs).order_by(Logs.id.desc())).scalars().first()
+        latest_log = Logs.query.filter_by(email_unique_id=email_id).first()
         latest_log.submitted = True
         db.session.commit()
         return render_template('Submitted.html')
@@ -299,18 +317,18 @@ def findEmail(CSV_File, email_content, email_subject, html):
 
 #Note, in order for the different names to occur, you must put [client] exactly
 
-def assign_token_links(email_subject):
+'''def assign_token_links(email_subject):
     users_database = Users.query.all()
     for users in users_database:
         if users.admin == True:
             random_token = str(uuid.uuid4())
             random_link = SingleUseLink(token=random_token, user_email=users.email_address, email_subject = email_subject)
             db.session.add(random_link)
-            db.session.commit()
+            db.session.commit()'''
 
 
 
-def confirm_email(CSV_File, email_content, email_subject, html):
+def confirm_email(email_id, email_content, email_subject, html):
     #assign_token_links(email_subject)
     smtp = smtplib.SMTP('send.smtp.com', 587)
     smtp.ehlo()
@@ -324,15 +342,62 @@ def confirm_email(CSV_File, email_content, email_subject, html):
     admin_users = Users.query.filter_by(admin=True).all()
     
     for admin in admin_users:
-        msg = confirm_button_function(email_content, email_subject, html, admin.email_address)
+        msg = confirm_button_function(email_id, email_content, email_subject, html, admin.email_address)
         smtp.sendmail(from_addr= "noreply@cbt.io", to_addrs= admin.email_address, msg = msg.as_string())
     #smtp.sendmail(from_addr= "noreply@cbt.io", to_addrs= 'rena@cbt.io', msg = msg.as_string())
     smtp.quit()
 
-#form_info={'file': '', 'email': '', 'subject': '', 'html':''}
-@app.route('/submit', methods=['POST'])
-def submit():
+def generate_short_id():
+    # Alphabet: uppercase, lowercase, and digits (62 possible characters)
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(10))
 
+def assign_admin_to_email(email_id, email_subject):
+    users_database = Users.query.all()
+    for users in users_database:
+        if users.admin == True:
+            token_entry= SingleUseLink(email_unique_id=email_id, user_email=users.email_address, email_subject = email_subject)
+            db.session.add(token_entry)
+            db.session.commit()
+
+#finished_pending={'finished_pending':'False'}
+@app.route('/create_email', methods=['GET','POST'])
+def create_email():
+    if request.method == 'POST':
+        '''csv_category = request.form.get('csv_type')
+        if csv_category == "preset_csv":
+            preset_chosen = request.form.get('preset_csv_options')
+            if preset_chosen =="Rena Emails":
+                with open('Rena Email CSV.csv', 'rb') as f:
+                    file = f.read()
+        elif csv_category == "custom_csv":
+            files = request.files.get('file')
+            file = files.read()'''
+        btn_clicked = request.form.get('action_type')
+        #file =request.files.get('file')
+        email=request.form['emailContent']
+        subject = request.form['subject']
+        html = request.form.get('HtmlButton')
+        data = {
+                'emailContent': email, 
+                'subject': subject, 
+                'html':html}
+        if btn_clicked == 'confirm':
+            print('confirm button clicked')
+            email_unique_id = generate_short_id()
+            log_email_entry = Logs(email_subject= subject, email_unique_id = email_unique_id)
+            db.session.add(log_email_entry)
+            db.session.commit()
+            assign_admin_to_email(email_unique_id, subject)
+            confirm_email(email_unique_id, email, subject, html)
+            return render_template('submit_email.html', email_unique_id = email_unique_id, data = data)
+    
+    return render_template('create_email.html')
+
+
+#form_info={'file': '', 'email': '', 'subject': '', 'html':''}
+@app.route('/submit/<email_unique_id>', methods=['GET', 'POST'])
+def submit_email(email_unique_id):
     if request.method == 'POST':
         csv_category = request.form.get('csv_type')
         if csv_category == "preset_csv":
@@ -352,22 +417,47 @@ def submit():
                 'emailContent': email, 
                 'subject': subject, 
                 'html':html}
-        if btn_clicked == 'confirm':
-            print('confirm button clicked')
-            log_email_entry = Logs(email_subject= subject)
-            db.session.add(log_email_entry)
-            db.session.commit()
-            confirm_email(file, email, subject, html)
-            return render_template('Frontend.html', data = data)
-        elif btn_clicked == 'submit':
-            findEmail(file, email, subject, html)
+        if btn_clicked == 'submit':
+            #FIX THISSSSS
+            send_email(file, email, email_unique_id, subject, html)
             return render_template('Frontend.html', data = {}, button_enabled = False)
       
         return render_template('Frontend.html', data = {})
+    return render_template("submit_email.html", email_unique_id= email_unique_id)
+
+
+@app.route('/confirm_email/<id>/<admin_email>', methods = ['GET', 'POST'])
+@login_required
+def confirm_email_page(id, admin_email):
+    link_record = SingleUseLink.query.filter_by(email_unique_id=id, user_email = admin_email).first_or_404()
+    if link_record.is_used==True:
+            return render_template('used_link.html')
+    else:
+        if request.method == 'POST':
+            first_user_id =0
+            username = current_user.username
+            confirm_logs = Logs.query.filter_by(email_unique_id=id).first_or_404()
+
+            is_button_clicked = request.form.get('submit_button')
+            if is_button_clicked == "confirm":
+                link_record.is_used = True
+                db.session.commit()
+                if confirm_logs.confirmation_one is None:
+                    first_user_id = current_user.id
+                    confirm_logs.confirmation_one=username
+                    db.session.commit()
+                elif confirm_logs.confirmation_one is not None and first_user_id != current_user.id:
+                    confirm_logs.confirmation_two=username
+                    db.session.commit()
+                return render_template('confirmation_page.html')
+             #return render_template('confirmation_email.html', token = token)
+        
+        
+    return render_template('confirmation_email.html', id = id, admin_email = admin_email)
+    
+    
 
     
-    else:
-        return render_template('Frontend.html', data = {})
 
 @app.route('/email')
 def email():
@@ -377,22 +467,7 @@ def email():
 def confirm_page():
     return render_template('confirmation_page.html')
 
-'''@app.route('/confirm_email/<string:token>', methods=['GET','POST'])
-@login_required
-def confirm_email_page(token):
-    username = current_user.username
-    link_record = SingleUseLink.query.filter_by(token=token, user_email=username).first_or_404()
-    if link_record.is_used:
-        return "This link is dead", 403
-    is_button_clicked = request.form.get('submit_button')
-    if is_button_clicked == "confirm":
-        link_record.is_used = True
-        db.session.commit()
-        return render_template('confirmation_email.html', random_token=token)'''
-@app.route('/confirm_email', methods=['GET','POST'])
-@login_required
-def confirm_email_page():
-    return render_template('confirmation_email.html')
+
     
     
     #return render_template('confirmation_email.html')
@@ -417,23 +492,8 @@ def event_listener(mapper, connection, target):
     if submitted:
         counter = 0
 
-finished_pending={'finished_pending':'False'}
-@app.route('/confirm_button', methods=['GET','POST'])
-def confirm_button():
-    
-    username = current_user.username
-    first_user_id =0
-    latest_log = db.session.execute(db.select(Logs).order_by(Logs.id.desc())).scalars().first()
-    if latest_log.confirmation_one is None:
-        first_user_id = current_user.id
-        latest_log.confirmation_one=username
-        db.session.commit()
-    elif latest_log.confirmation_one is not None and first_user_id != current_user.id:
-        latest_log.confirmation_two=username
-        db.session.commit()
-    #finished_pending['finished_pending'] = 'True'
 
-    return render_template('confirmation_page.html')
+
     
 
 def add_users(username, password, admin):
@@ -468,7 +528,7 @@ def admin_page():
 
 @app.route('/pending')
 def pending():
-    pending = finished_pending['finished_pending']
+    
     return render_template(f'partials/{pending}.html')
 
 '''@app.route('/csv')
