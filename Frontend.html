@@ -14,7 +14,21 @@
 </head>
 
 <body>
-   
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid justify-content-center">
+            <a class="navbar-brand" href="/">Email Blaster</a>
+        </div>
+        <ul class="navbar-nav">
+            <li class="nav-item">
+                <a class="btn btn-dark" style='width: 115px;' href="{{url_for('admin_page')}}">Admin Page</a>
+            </li>
+            <li class="nav-item">
+                {% if current_user.is_authenticated %}
+                <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+                {% endif %}
+            </li>
+        </ul>
+    </nav>
 
 
 
@@ -38,54 +52,7 @@
             <div class="container-xxl">
                 <div class="row justify-content-center">
                     <div class="col-10 custom-margin-top" id='form'>
-                        <form action="{{url_for('submit')}}" method="POST" enctype="multipart/form-data">
-                            <div class="mb-2">
-                                <label for="form_type" class="form-label">Preset or Custom CSV File?</label>
-                                <select class="form-control" name="csv_type" id="csv_type">
-                                    <option selected>Options</option>
-                                    <option value="preset_csv">Preset CSV</option>
-                                    <option value="custom_csv">Custom CSV</option>
-                                </select>
-                            </div>
-                            <div id="presets" class="d-none mb-3">
-                                <label for="form_type" class="form-label">Preset Options</label>
-                                <select class="form-control" name="preset_csv_options" id="form_type">
-                                    <option selected>Options</option>
-                                    <option value="Rena Emails">Rena Emails</option>
-                                    <option value="preset2">Preset2</option>
-                                </select>
-                            </div>
-
-                            <div id="customs" class="d-none mb-2">
-                                <label for="csvFile" class="form-label">Custom CSV</label>
-                                <input type="file" name="file" class="form-control" id="csvFile" accept=".csv"
-                                    value="{{data.get('file', '')}}" placeholder="Enter csv File">
-                            </div>
-                            
-
-                            <div class="form-group">
-                                <label for="subject">Subject: </label>
-                                <input type="text" class="form-control" name="subject" id="subject"
-                                    placeholder="Subject" value="{{data.get('subject', '')}}">
-                            </div>
-
-                            <div class="form-group">
-                                <label for="emailContent">Email Content: </label>
-                                <textarea class="form-control" name="emailContent"
-                                    id="emailContent">{{data.get('emailContent', '')}}</textarea>
-                            </div>
-                            <!--
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="" name = "HtmlButton" id="HtmlButton">
-                        <label class="form-check-label" for="HtmlButton"> HTML Format</label>
-                    </div>-->
-
-
-                            <button type="submit" name="action_type" value="confirm"
-                                class="btn btn-primary">Confirm</button>
-                            <button type="submit" id='submit' name="action_type" value="submit" class="btn btn-primary"
-                                {{'disabled' if not button_enabled}}>Submit</button>
-                        </form>
+                        <a href = "{{url_for('create_email')}}"> Create New Email</a>
                     </div>
                 </div>
             </div>
