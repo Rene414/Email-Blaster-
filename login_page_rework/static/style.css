@@ -1,0 +1,70 @@
+/* --- Base Styles --- */
+body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    color: #e0e0e0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+/* --- Login Card --- */
+.login-card {
+    width: 100%;
+    max-width: 400px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(15px);
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.login-title {
+    font-weight: 700;
+    font-size: 2.5rem;
+    color: #fff;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+/* --- Form Styles --- */
+.form-control {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.form-control:focus {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #e94560;
+    box-shadow: 0 0 0 0.25rem rgba(233, 69, 96, 0.25);
+    color: #fff;
+}
+
+.form-control::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* --- Button --- */
+.btn-login {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 10px;
+    background: #e94560;
+    color: #fff;
+    font-weight: 700;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.btn-login:hover {
+    background: #d43d51;
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px rgba(233, 69, 96, 0.2);
+}

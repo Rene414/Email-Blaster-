@@ -1,0 +1,105 @@
+/* --- Base Styles --- */
+body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+/* --- Navbar --- */
+.navbar {
+    background-color: rgba(22, 33, 62, 0.8);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.navbar-brand {
+    font-weight: 700;
+    color: #e94560 !important; /* Vibrant accent color */
+}
+
+/* --- Main Content --- */
+.main-content {
+    padding-top: 4rem;
+    padding-bottom: 4rem;
+}
+
+/* --- Glassmorphism Card --- */
+.glass-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(15px);
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    height: 100%;
+}
+
+/* --- Form Styles --- */
+.form-label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #e0e0e0;
+}
+
+.form-control {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border-radius: 8px;
+}
+
+.form-control:focus {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: #e94560;
+    box-shadow: 0 0 0 0.25rem rgba(233, 69, 96, 0.25);
+    color: #fff;
+}
+
+/* --- Summernote Editor --- */
+.note-editor.note-frame {
+    border-radius: 8px;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.note-toolbar {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-bottom-color: rgba(255, 255, 255, 0.2);
+}
+
+.note-editable {
+    background-color: rgba(0, 0, 0, 0.2);
+    color: #fff;
+}
+
+/* --- Buttons --- */
+.btn-custom-primary {
+    background: #e94560;
+    color: #fff;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-custom-primary:hover {
+    background: #d43d51;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(233, 69, 96, 0.2);
+}
+
+.btn-custom-secondary {
+    background: #4a4a5e;
+    color: #fff;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-custom-secondary:hover {
+    background: #5a5a6e;
+    transform: translateY(-2px);
+}

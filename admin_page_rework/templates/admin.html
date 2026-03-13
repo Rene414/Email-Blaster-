@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Email Blaster - Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Email Blaster</a>
+            <div class="d-flex">
+                <a class="btn btn-outline-light me-2" href="{{url_for('frontend')}}">Home Page</a>
+                {% if current_user.is_authenticated %}
+                <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-lg-10">
+                    <div class="glass-card">
+                        <h1 class="page-title">Admin Dashboard</h1>
+                        <div class="row g-5">
+                            <!-- Left Column: User Table -->
+                            <div class="col-md-7">
+                                <h2>Existing Users</h2>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">ID</th>
+                                                <th scope="col">Username</th>
+                                                <th scope="col">Admin</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for user in users_table %}
+                                            <tr>
+                                                <th scope="row">{{user.id}}</th>
+                                                <td>{{user.username}}</td>
+                                                <td>{{user.admin}}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <!-- Right Column: Management Form -->
+                            <div class="col-md-5">
+                                <h2>Manage Users</h2>
+                                <form action="{{url_for('admin_page')}}" method="POST" enctype="multipart/form-data">
+                                    <div class="mb-3">
+                                        <label for="form_type" class="form-label">Action</label>
+                                        <select class="form-select" name="user_form_type" id="form_type">
+                                            <option selected>Select an Option</option>
+                                            <option value="add_user">Add User</option>
+                                            <option value="delete_user">Delete User</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Add User Form -->
+                                    <div id="add_form" class="d-none mb-3">
+                                        <div class="mb-3">
+                                            <label for="username" class="form-label">Username</label>
+                                            <input type="text" class="form-control" name="username" id="username" placeholder="New username">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="password" class="form-label">Password</label>
+                                            <input type="password" class="form-control" name="password" id="password" placeholder="New password">
+                                        </div>
+                                        <div class="form-check mb-3">
+                                            <input class="form-check-input" name="admin" type="checkbox" id="admin_privilege">
+                                            <label class="form-check-label" for="admin_privilege">Grant Admin Privileges?</label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Delete User Form -->
+                                    <div id="delete_form" class="d-none mb-3">
+                                        <label for="user_id" class="form-label">Select User ID to Delete</label>
+                                        <select class="form-select" name="user_id" id="user_id">
+                                            {% for user in users_table %}
+                                            <option value="{{user.id}}">{{user.id}} - {{user.username}}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+
+                                    <button type="submit" name="action_type" value="confirm" class="btn btn-custom-primary w-100">Submit Action</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
+    <script>
+        const dropdown = document.getElementById('form_type');
+        const add_form = document.getElementById('add_form');
+        const delete_form = document.getElementById('delete_form');
+
+        dropdown.addEventListener('change', function () {
+            add_form.classList.add('d-none');
+            delete_form.classList.add('d-none');
+
+            if (this.value === 'add_user') {
+                add_form.classList.remove('d-none');
+            } else if (this.value === 'delete_user') {
+                delete_form.classList.remove('d-none');
+            }
+        });
+    </script>
+
+</body>
+
+</html>

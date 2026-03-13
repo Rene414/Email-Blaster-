@@ -1,0 +1,36 @@
+/* --- Base Styles --- */
+body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    color: #e0e0e0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+/* --- Notification Card --- */
+.notification-card {
+    width: 100%;
+    max-width: 500px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(15px);
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    text-align: center;
+}
+
+.notification-title {
+    font-weight: 700;
+    font-size: 2rem;
+    color: #e94560; /* Vibrant accent color */
+    margin-bottom: 1rem;
+}
+
+.notification-text {
+    font-size: 1.1rem;
+    color: #ccc;
+}
