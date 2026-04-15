@@ -4,7 +4,7 @@ from io import StringIO
 import csv
 from datetime import datetime
 from zoneinfo import ZoneInfo
-import pytz
+
 from functools import wraps
 
 from email.mime.text import MIMEText
@@ -19,7 +19,6 @@ from flask_socketio import SocketIO
 
 import secrets
 import string
-from premailer import transform
 import re
 import base64
 import uuid
@@ -35,9 +34,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_BINDS'] = {
     'count': 'sqlite:///logs.db', # Secondary DB
     'token_links': 'sqlite:///confirm_links.db', #Third DB
-    'documentation' : 'sqlite:///email_blast_documentation.db'
+    'documentation' : 'sqlite:///email_blast_documentation.db',
+    'saved_emails': 'sqlite:///saved_emails.db',
+    'email_contents': 'sqlite:///email_contents.db'
 }
-
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)
 
 login_manager=LoginManager()
 login_manager.init_app(app)
@@ -60,9 +61,10 @@ class Logs(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email_unique_id = email_subject = db.Column(db.String(15), unique=True)
     email_subject = db.Column(db.String(200))
-    email_timestamp = db.Column(db.String(100), default =datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
+    email_timestamp = db.Column(db.String(100))
     confirmation_one = db.Column(db.String(80), nullable =True)
     confirmation_two = db.Column(db.String(80), nullable = True)
+    status = db.Column(db.String(100))
     submitted = db.Column(db.Boolean, default = False)
 
 class Users(db.Model, UserMixin):
@@ -88,7 +90,25 @@ class Documentation(db.Model):
     client_name = db.Column(db.String(100), nullable = True)
     email_subject = db.Column(db.String(180), nullable = False)
     email_unique_id = db.Column(db.String(15))
-    date_sent = db.Column(db.String(100), default =datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
+    date_sent = db.Column(db.String(100))
+
+class SavedEmails(db.Model):
+    __bind_key__= "saved_emails"
+    id = db.Column(db.Integer, primary_key=True)
+    email_unique_id = db.Column(db.String(15))
+    creator = db.Column(db.String(100), nullable = False)
+    email_subject = db.Column(db.String(180), nullable = False)
+    email_content = db.Column(db.Text, nullable = False)
+    date_saved = db.Column(db.String(100))
+
+class EmailContent(db.Model):
+    __bind_key__= "email_contents"
+    id = db.Column(db.Integer, primary_key=True)
+    email_unique_id = db.Column(db.String(15))
+    creator = db.Column(db.String(100), nullable = False)
+    email_subject = db.Column(db.String(180), nullable = False)
+    email_content = db.Column(db.Text, nullable = False)
+    date_saved = db.Column(db.String(100))
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -196,7 +216,7 @@ def confirm_button_function (email_id, text, subject, html, admin_email):
     msg_mixed.attach(msg_alternative)
     msg_mixed.attach(msg_root)
     html_content = html_template.format(message=text)
-    msg_mixed['Subject'] = subject
+    msg_mixed['Subject'] = "Email Blast Request: "+ subject
     if html == None:
         image_pattern = r'src="data:image/(?P<ext>.*?);base64,(?P<data>.*?)"'
         images = re.finditer(image_pattern, text)
@@ -239,10 +259,16 @@ def confirm_button_function (email_id, text, subject, html, admin_email):
     return msg_mixed
 
 
+
+
 @app.route('/')
 @login_required
 def frontend():
-    return render_template('Frontend.html', data = {})
+    all_saved_emails = SavedEmails.query.filter_by(creator = current_user.email_address).all()
+    all_confirmed_emails= Logs.query.filter_by(status = "Waiting Confirmation").all()
+    confirm1 = Logs.query.filter(Logs.confirmation_one.isnot(None)).all()
+    confirm2 = Logs.query.filter(Logs.confirmation_two.isnot(None)).all()
+    return render_template('Frontend.html', email_list = all_saved_emails, confirmed_emails= all_confirmed_emails, confirm1 = confirm1, confirm2 = confirm2)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login_page():
@@ -302,7 +328,7 @@ def send_email(CSV_File, email_content, email_id, email_subject, html):
             #email_organization=df.loc[csv_row, "Organization"]
             msg = message_function(email_content, email_subject, email_name, html)
             smtp.sendmail(from_addr= "noreply@cbt.io", to_addrs= email, msg = msg.as_string())
-            new_documentation = Documentation(client_email = email, client_name = email_name, email_subject = email_subject, email_unique_id= email_id)
+            new_documentation = Documentation(client_email = email, client_name = email_name, email_subject = email_subject, email_unique_id= email_id, date_sent = datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
             db.session.add(new_documentation)
             db.session.commit()
             #create_csv([email_organization, email_name, email], get_date())
@@ -382,17 +408,112 @@ def create_email():
                 'emailContent': email, 
                 'subject': subject, 
                 'html':html}
+        if btn_clicked == "save":
+            email_unique_id = generate_short_id()
+            #datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p')
+            new_saved_email = SavedEmails(email_unique_id = email_unique_id, creator = current_user.email_address, email_subject = subject, email_content = email, date_saved = datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
+            db.session.add(new_saved_email)
+            db.session.commit()
+            new_log = Logs(email_subject= subject, email_unique_id = email_unique_id, email_timestamp =datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'), status = "Saved")
+            db.session.add(new_log)
+            db.session.commit()
+            return redirect(url_for('frontend'))
         if btn_clicked == 'confirm':
             print('confirm button clicked')
             email_unique_id = generate_short_id()
-            log_email_entry = Logs(email_subject= subject, email_unique_id = email_unique_id)
+            print(f"Function triggered at: {datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p')}")
+            log_email_entry = Logs(email_subject= subject, email_unique_id = email_unique_id, email_timestamp =datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'),status = "Waiting Confirmation")
             db.session.add(log_email_entry)
+            db.session.commit()
+            new_email_entry = EmailContent(email_unique_id=email_unique_id, creator = current_user.email_address, email_subject = subject, email_content = email, date_saved = datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
+            db.session.add(new_email_entry)
             db.session.commit()
             assign_admin_to_email(email_unique_id, subject)
             confirm_email(email_unique_id, email, subject, html)
-            return render_template('submit_email.html', email_unique_id = email_unique_id, data = data)
+            return render_template('confirmed_emails.html', email_unique_id = email_unique_id, data = data)
     
     return render_template('create_email.html')
+
+@app.route('/get_status/<email_unique_id>')
+def get_status(email_unique_id):
+    log_entry = Logs.query.filter_by(email_unique_id=email_unique_id).first()
+    if log_entry.confirmation_one and log_entry.confirmation_two:
+        return {'status': 'confirms_done'}
+    else:
+        return {'status': 'confirms not done'}
+
+
+@app.route('/saved_emails/<email_unique_id>', methods=['GET','POST'])
+def saved_emails(email_unique_id):
+    find_saved_email = SavedEmails.query.filter_by(creator = current_user.email_address, email_unique_id=email_unique_id).first()
+    data={
+                'emailContent': find_saved_email.email_content, 
+                'subject': find_saved_email.email_subject,
+                'date_saved': find_saved_email.date_saved}
+    
+    if request.method == 'POST':
+        
+        btn_clicked = request.form.get('action_type')
+        email=request.form['emailContent']
+        subject = request.form['subject']
+        html = request.form.get('HtmlButton')
+        if btn_clicked == 'update':
+            saved_email = SavedEmails.query.filter_by(email_unique_id=email_unique_id).first()
+            saved_email.email_content = email
+            saved_email.email_subject = subject
+            saved_email.date_saved = datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p')
+            db.session.commit()
+            data2={
+                'emailContent': find_saved_email.email_content, 
+                'subject': find_saved_email.email_subject,
+                'date_saved': find_saved_email.date_saved
+            }
+            return render_template('saved_emails.html', email_unique_id = email_unique_id, data=data2)
+        if btn_clicked == 'confirm':
+            data3={
+                'emailContent': find_saved_email.email_content, 
+                'subject': find_saved_email.email_subject,
+                'date_saved': find_saved_email.date_saved}
+            log_email_entry = Logs.query.filter_by(email_unique_id=email_unique_id).first()
+            log_email_entry.status = "Waiting Confirmation"
+            db.session.commit()
+            print('confirm button clicked')
+            assign_admin_to_email(email_unique_id, subject)
+            confirm_email(email_unique_id, email, subject, html)
+            delete_saved_email = SavedEmails.query.filter_by(email_unique_id=email_unique_id).first()
+            if delete_saved_email:
+                db.session.delete(delete_saved_email)
+                db.session.commit()
+            new_email_entry = EmailContent(email_unique_id=email_unique_id, creator = current_user.email_address, email_subject = subject, email_content = email, date_saved = datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%m/%d/%y %I:%M %p'))
+            db.session.add(new_email_entry)
+            db.session.commit()
+            return render_template('confirmed_emails.html', email_unique_id = email_unique_id, data = data3)
+    return render_template('saved_emails.html', email_unique_id = email_unique_id, data=data)
+
+@app.route('/confirmed_emails/<email_unique_id>', methods=['GET','POST'])
+def confirmed_emails(email_unique_id):
+    email_data = EmailContent.query.filter_by(email_unique_id=email_unique_id).first()
+    subject = email_data.email_subject
+    content = email_data.email_content
+    data = {
+                'emailContent': content, 
+                'subject': subject}
+    check_confirms= Logs.query.filter_by(email_unique_id=email_unique_id).first()
+   
+    confirms = True if check_confirms.confirmation_two else False
+
+    if request.method == 'POST':
+        btn_clicked = request.form.get('action_type')
+        if btn_clicked == 'submit':
+            print('confirm button clicked')
+            log_email_entry = Logs.query.filter_by(email_unique_id=email_unique_id).first()
+            log_email_entry.status = "Confirmed"
+            db.session.commit()
+            
+
+            return render_template('submit_email.html', email_unique_id = email_unique_id, data = data)
+    return render_template('confirmed_emails.html', email_unique_id = email_unique_id, data=data, confirms=confirms)
+
 
 
 #form_info={'file': '', 'email': '', 'subject': '', 'html':''}
@@ -413,17 +534,32 @@ def submit_email(email_unique_id):
         email=request.form['emailContent']
         subject = request.form['subject']
         html = request.form.get('HtmlButton')
-        data = {'file': file, 
+        email_data = EmailContent.query.filter_by(email_unique_id=email_unique_id).first()
+        subject = email_data.email_subject
+        content = email_data.email_content
+        data = {
+                'emailContent': content, 
+                'subject': subject}
+        '''data = {
                 'emailContent': email, 
                 'subject': subject, 
-                'html':html}
+                'html':html}'''
+        
         if btn_clicked == 'submit':
             #FIX THISSSSS
+            record = Logs.query.filter_by(email_unique_id=email_unique_id).first()
+            if record:
+                record.status = "Submitted"
+                db.session.commit()
+            record2 = EmailContent.query.filter_by(email_unique_id=email_unique_id).first()
+            if record2:
+                db.session.delete(record2)
+                db.session.commit()
             send_email(file, email, email_unique_id, subject, html)
-            return render_template('Frontend.html', data = {}, button_enabled = False)
+            return redirect(url_for('frontend'))
       
-        return render_template('Frontend.html', data = {})
-    return render_template("submit_email.html", email_unique_id= email_unique_id)
+    return render_template("submit_email.html", email_unique_id= email_unique_id, data=data)
+
 
 
 @app.route('/confirm_email/<id>/<admin_email>', methods = ['GET', 'POST'])
