@@ -9,25 +9,97 @@
         integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
+    <style>
+        body {
+            background: url("{{ url_for('static', filename='images/explosion_background.jpg') }}") no-repeat center center fixed;
+            -webkit-background-size: cover;
+            -moz-background-size: cover;
+            -o-background-size: cover;
+            background-size: cover;
+            color: #e0e0e0;
+        }
+
+        .display-4 {
+            color: #ffffff;
+        }
+
+        .lead {
+            color: #c0c0c0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .footer {
+            background-color: rgba(0, 0, 0, 0.5) !important;
+        }
+
+        /* Animation for the heading */
+        .animated-heading {
+            animation: fadeInDown 1s ease-in-out;
+        }
+
+        @keyframes fadeInDown {
+            0% {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 3D Text Effect */
+        .text-3d {
+            text-shadow: 0 1px 0 #ccc,
+                0 2px 0 #c9c9c9,
+                0 3px 0 #bbb,
+                0 4px 0 #b9b9b9,
+                0 5px 0 #aaa,
+                0 6px 1px rgba(0, 0, 0, .1),
+                0 0 5px rgba(0, 0, 0, .1),
+                0 1px 3px rgba(0, 0, 0, .3),
+                0 3px 5px rgba(0, 0, 0, .2),
+                0 5px 10px rgba(0, 0, 0, .25),
+                0 10px 10px rgba(0, 0, 0, .2),
+                0 20px 20px rgba(0, 0, 0, .15);
+            color: #fff;
+            font-weight: bold;
+        }
+    </style>
 </head>
 
-<body>
+<body class="d-flex flex-column h-100">
 
 
-   
-    <!--<form method="POST" action="/confirm_button/{{random_token}}">-->
-    <form method="POST" action = "{{ url_for('confirm_button') }}">
-        <input type="hidden" name="action_type" value="button_pressed">
+   <main class="flex-shrink-0">
+        <div class="container">
+            <div class="row justify-content-center align-items-center" style="height: 80vh;">
+                <div class="col-md-8 text-center">
+                    <h1 class="display-1 mb-4 animated-heading text-3d">Email Blaster Confirmation</h1>
+                    <p class="lead mb-5">Are you sure you want to proceed? This action cannot be undone.</p>
+
+                <form method="POST" action="{{ url_for('confirm_email_page', id = id, admin_email=admin_email) }}">
+                <input type="hidden" name="action_type" value="button_pressed">
     
-        <button id = "clickButton" value = "confirm" type="submit" name="submit_button">
-        Confirmation to send the Email</button>
-</form>
+                <button id = "clickButton" value = "confirm" type="submit" name="submit_button">
+                Confirmation to send the Email</button>
+        </form>
+        </div>
+            </div>
+        </div>
+    </main>
+    <footer class="footer mt-auto py-3">
+        <div class="container text-center">
+            <span class="text-muted">Email Blaster | &copy; 2026</span>
+        </div>
+    </footer>
 
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
-        crossorigin="anonymous">
-        
+        crossorigin="anonymous"></script>
+        <script>
     document.getElementById('clickButton').addEventListener('click', function() {
             // Send a POST request to the Flask server
             fetch('/confirm_button', {
