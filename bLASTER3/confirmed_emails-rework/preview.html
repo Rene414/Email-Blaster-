@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Email Confirmation - Email Blaster</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-bs4.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Email Blaster</a>
+            <div class="d-flex">
+                <a class="btn btn-dark me-2" href="#">Home Page</a>
+                <a class="btn btn-dark me-2" href="#">Admin Page</a>
+                <a href="#" class="btn btn-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid main-container">
+        <div class="row">
+            <div class="col-lg-5">
+                <div class="card email-preview mb-4">
+                    <div class="card-header">
+                        Email Waiting for Confirmation
+                    </div>
+                    <div class="card-body">
+                        <h5>ID: abc-123-def-456</h5>
+                        <hr>
+                        <h5>Quarterly Newsletter Update</h5>
+                        <div>
+                            <p>Hello Team,</p>
+                            <p>This is a preview of our upcoming quarterly newsletter. Please review the content and provide any feedback.</p>
+                            <p>Thank you!</p>
+                        </div>
+                        <hr>
+                        <small class="text-muted">Request for Confirmation On: 2026-04-17</small>
+                    </div>
+                </div>
+                <div class="card confirmation-status">
+                    <div class="card-header">Confirmation Status</div>
+                    <div class="card-body">
+                        <h4 id="conf-one" class="confirmed">
+                            Confirm one: admin1@example.com
+                        </h4>
+                        <h4 id="conf-two" class="not-confirmed">
+                            Confirm two: Not confirmed
+                        </h4>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-header">Edit Email Content</div>
+                    <div class="card-body">
+                        <form action="#" method="POST">
+                            <div class="form-group">
+                                <label for="subject" class="form-label">Subject:</label>
+                                <input type="text" class="form-control" name="subject" id="subject" placeholder="Subject" value="Quarterly Newsletter Update">
+                            </div>
+                            <div class="form-group">
+                                <label for="emailContent" class="form-label">Email Content:</label>
+                                <textarea class="form-control" name="emailContent" id="emailContent"><p>Hello Team,</p><p>This is a preview of our upcoming quarterly newsletter. Please review the content and provide any feedback.</p><p>Thank you!</p></textarea>
+                            </div>
+                            <button type="submit" name="action_type" id="action-button" value="submit" class="btn btn-primary" disabled>Waiting for Confirmation...</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-bs4.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            $('#emailContent').summernote({
+                height: 300
+            });
+        });
+
+        // Mock script for preview purposes
+        document.addEventListener('DOMContentLoaded', function() {
+            const btn = document.getElementById('action-button');
+            const confTwo = document.getElementById('conf-two');
+            
+            // Simulate the second confirmation after 5 seconds
+            setTimeout(() => {
+                confTwo.innerText = "Confirm two: admin2@example.com";
+                confTwo.classList.add('confirmed');
+                confTwo.classList.remove('not-confirmed');
+
+                // Enable the button
+                btn.disabled = false;
+                btn.innerText = "Proceed Sending The Email Blast Now";
+                btn.classList.add('ready');
+            }, 5000);
+        });
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Confirm - Email Blaster</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='confirmation_email-rework/style.css') }}">
+</head>
+
+<body>
+    <main class="main-content">
+        <h1 class="display-1">Confirm Email Blast</h1>
+        <p class="lead">Are you sure you want to send this email? This action cannot be undone.</p>
+
+        <form method="POST" action="{{ url_for('confirm_email_page', id=id, admin_email=admin_email) }}">
+            <input type="hidden" name="action_type" value="button_pressed">
+            <button id="clickButton" value="confirm" type="submit" name="submit_button" class="btn btn-primary">Confirm & Send Email</button>
+        </form>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <span>Email Blaster | &copy; 2026</span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('clickButton').addEventListener('click', function() {
+            // This fetch call might be redundant if the form submission is what triggers the action.
+            // However, keeping it in case you have a dual purpose (e.g., logging before submitting).
+            fetch('/confirm_button', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    console.log('Confirmation action logged.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+
+</body>
+
+</html>
